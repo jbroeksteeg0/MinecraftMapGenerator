@@ -19,6 +19,8 @@
 
 #define SEGSIZE 16384
 #define RADIUS 1
+#define CACHE_SIZE 80
+#define AFTER_1_15 0
 
 using namespace std;
 
@@ -192,13 +194,14 @@ void getTop(int64_t chunkX, int64_t chunkZ) {
       }
     }
     for (int64_t ymod = rootTag->tag_list.size-1; ymod >= 0 && toCheck.size(); ymod--) { // TODO might not have all Ys
+        // if (ymod>4) {continue;}
         vector<int> blockStateInds;
         vector<string> paletteNames;
         nbt_tag_t* newRoot = rootTag->tag_list.value[ymod];
         if (newRoot->tag_compound.size>1e9){ // glitched
           continue;
         }
-        vector<int64_t> blockData;
+        vector<uint64_t> blockData;
 
         if (newRoot->type != NBT_TYPE_COMPOUND) {
           cout << "Skipping ymod " << ymod << endl;
@@ -230,31 +233,52 @@ void getTop(int64_t chunkX, int64_t chunkZ) {
         }
         if (foundY == -1){continue;}
         if (blockData.size()){
-            int failed = 0;
-            // cout << blockData.size() << " big\n";
-            int bits = 64;
-            int thingsPerLong =(int) ceil((float)4096 / (float)blockData.size());
-            thingsPerLong = min(thingsPerLong, 16);
-            int perThing = bits / thingsPerLong; 
 
-            // cout << "each takes " << perThing << "\n";
-            for (int64_t i: blockData) { // should work for other ones?
-                bitset<64> bs = i;
-                for (int j = 0; j < thingsPerLong; j++) {
-                    int newVal = 0;
-                    for (int k = 0; k < perThing; k++){
-                        if (bs[j*perThing + k]) {
-                            newVal |= 1<<k;
+            if (AFTER_1_15) {
+                int failed = 0;
+                int bits = 64;
+                int thingsPerLong =(int) ceil((float)4096 / (float)blockData.size());
+                thingsPerLong = min(thingsPerLong, 16);
+                int perThing = bits / thingsPerLong; 
+
+                for (uint64_t i: blockData) { // should work for other ones?
+                    bitset<64> bs = i;
+                    for (int j = 0; j < thingsPerLong; j++) {
+                        int newVal = 0;
+                        for (int k = 0; k < perThing; k++){
+                            if (bs[j*perThing + k]) {
+                                newVal |= 1<<k;
+                            }
                         }
-                        // cout << bs[j*perThing + k];
+                        blockStateInds.push_back(newVal);
                     }
-                    blockStateInds.push_back(newVal);
-                    // bitset<4> temp = blockStateInds.back();
-                    // cout << " " << newVal << ", ";
+
                 }
-
+            } else {
+                int perThing = (64 * blockData.size()) / 4096;
+                vector<bool> bits;
+                for (uint64_t i: blockData) {
+                    bitset<64> bs = i;
+                    // cout << bs << "\n";
+                    // cout << i << "\n";
+                    for (int j = 0; j < 64; j++){
+                        bits.push_back(bs[j]);
+                    }
+                }
+                int cnt = 0;
+                int current = 0;
+                for (int i = 0; i < bits.size(); i++){
+                    current |= bits[i] << cnt;
+                    cnt++;
+                    if (cnt == perThing) {
+                        blockStateInds.push_back(current);
+                        // cout << "got " << current << "\n";
+                        cnt=0;
+                        current=0;
+                    }
+                }
+                // exit(0);
             }
-
         }
 
         if (blockStateInds.empty()) {continue;}
@@ -276,14 +300,9 @@ void getTop(int64_t chunkX, int64_t chunkZ) {
                 continue;
             }
             if (blockStateInds[x + (z*16) + (y*16*16)] != -1) {
-                // blocks[{worldX,(ymod-1)*16 + y,worldZ}] = paletteNames[blockStateInds[x + (z*16) + (y*(16*16))]];
                 string name = paletteNames[blockStateInds[x + (y*(16*16)) + z*16]];
-                // cout << worldX << " " << y << " " << worldZ << " " << name << "\n";
                 if (!skipBlocks.count(name)) {
-                    assert(heighest.find({worldX,worldZ}) == heighest.end());
-                    heighest[{worldX,worldZ}] = paletteNames[blockStateInds[x + (z*16) + (y*(16*16))]];
                     currentMap[{worldX, worldZ}] = paletteNames[blockStateInds[x + (z*16) + (y*(16*16))]];
-                    // cout << worldX << "," << worldZ << ": " << name << "\n";
                     toRemove.push_back(pi);
                 }
 
@@ -386,9 +405,11 @@ int main() {
                 getTop(i,j);
             }
         }
-        writeData(currentMap);
-        currentMap.clear();
+        if (c%CACHE_SIZE == 0){
+            writeData(currentMap);
+        }
     }
+    writeData(currentMap);
     finishProcess();
     cout << "FINISHED\n";
 

@@ -35,13 +35,13 @@ void startFile(int bound) {
 }
 map<string, int> unknownFreq;
 
-void writeData(map<vector<int>, string> blocks) {
+void writeData(map<vector<int>, string> &blocks) {
     vector<pair<pair<int,int>, string>> toChange;
 
     for (pair<vector<int>, string> cb: blocks) {
         toChange.push_back({{cb.first[0], cb.first[1]}, cb.second});
     }
-
+    blocks.clear();
     sort(toChange.begin(), toChange.end(), [&](auto a, auto b) {
         return make_pair(a.first.second, a.first.first) < make_pair(b.first.second, b.first.first);
     });
