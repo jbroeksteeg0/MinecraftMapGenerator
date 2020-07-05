@@ -18,8 +18,8 @@
 #include "nbt.h"
 
 #define SEGSIZE 16384
-#define RADIUS 1
-#define CACHE_SIZE 80
+#define RADIUS 5
+#define CACHE_SIZE 25
 #define AFTER_1_15 0
 
 using namespace std;
@@ -323,7 +323,7 @@ void getTop(int64_t chunkX, int64_t chunkZ) {
 int main() {
     // get file names
     vector<pair<int,int>> regions;
-    string dir = "TestWorld/";
+    string dir = "region/";
     for (const auto& entry : std::experimental::filesystem::directory_iterator(dir)) {
       const auto str = entry.path().filename().string();
 
@@ -371,7 +371,8 @@ int main() {
         int regionZ = currRegion.second;
         if (max(regionX,regionZ) > RADIUS || min(regionX,regionZ) < -RADIUS) {continue;}
         string regionName = dir+"r." + to_string(currRegion.first) + "." + to_string(currRegion.second) + ".mca";
-        cout << "Processing " << c << "/" << regions.size() << ": " << regionName << "\n";
+        cout << "Processing " << c << "/" << regions.size() << ": " << regionName << ".";
+        cout.flush();
         c++;
         ifstream inputStream(regionName, ios::binary);
 
@@ -406,8 +407,11 @@ int main() {
             }
         }
         if (c%CACHE_SIZE == 0){
+            cout << " Writing data...";
+            cout.flush();
             writeData(currentMap);
         }
+        cout << " Done!" << endl;
     }
     writeData(currentMap);
     finishProcess();
